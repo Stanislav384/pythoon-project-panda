@@ -1,0 +1,113 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EnemySpawner : MonoBehaviour
+{
+    [Header("Префабы врагов")]
+    public GameObject enemy1Prefab; // Лёгкий
+    public GameObject enemy2Prefab; // Средний
+    public GameObject enemy3Prefab; // Босс
+
+    [Header("Шансы появления (веса)")]
+    public float lightChance = 50f;   // 50%
+    public float mediumChance = 10f;  // 10%
+    public float bossChance = 0.1f;   // 0.1%
+    
+    [Tooltip("На сколько увеличивается шанс после волны (1.2 = +0.2x или +20%)")]
+    public float chanceMultiplier = 1.2f; 
+
+    [Header("Настройки волны")]
+    public Transform spawnPoint;
+    public int enemiesPerWave = 15;     // Врагов в одной волне
+    public float spawnInterval = 2f;    // Интервал спавна (2 сек)
+    public float restTime = 5f;         // Отдых между волнами (5 сек)
+
+    // Список для отслеживания живых врагов текущей волны
+    private List<GameObject> aliveEnemies = new List<GameObject>();
+    private int currentWave = 1;
+
+    void Start()
+    {
+        if (enemy1Prefab == null || enemy2Prefab == null || enemy3Prefab == null || spawnPoint == null)
+        {
+            Debug.LogError("Не все префабы врагов или точка спавна назначены в EnemySpawner!");
+            return;
+        }
+
+        // Запускаем бесконечный цикл волн
+        StartCoroutine(WaveRoutine());
+    }
+
+    private IEnumerator WaveRoutine()
+    {
+        // Бесконечный цикл для волн
+        while (true)
+        {
+            Debug.Log($"--- Началась волна {currentWave}! ---");
+
+            // 1. Спавним 15 врагов с интервалом в 2 секунды
+            for (int i = 0; i < enemiesPerWave; i++)
+            {
+                SpawnRandomEnemy();
+                yield return new WaitForSeconds(spawnInterval);
+            }
+
+            Debug.Log("Все враги волны вышли. Ждем их уничтожения...");
+
+            // 2. Ждем, пока все 15 врагов не будут убиты (или удалены со сцены)
+            while (aliveEnemies.Count > 0)
+            {
+                // Удаляем из списка всех врагов, которые уже уничтожены (равны null)
+                aliveEnemies.RemoveAll(enemy => enemy == null);
+                
+                // Проверяем состояние каждые полсекунды, чтобы не нагружать процессор
+                yield return new WaitForSeconds(0.5f); 
+            }
+
+            Debug.Log($"Волна {currentWave} зачищена! Отдых {restTime} секунд...");
+
+            // 3. Увеличиваем шансы появления среднего врага и босса на 0.2x (+20%)
+            mediumChance *= chanceMultiplier;
+            bossChance *= chanceMultiplier;
+            Debug.Log($"Новые шансы -> Средний: {mediumChance:F2}%, Босс: {bossChance:F3}%");
+
+            // 4. Отдых 5 секунд перед следующей волной
+            yield return new WaitForSeconds(restTime);
+
+            currentWave++;
+        }
+    }
+
+    private void SpawnRandomEnemy()
+    {
+        GameObject prefabToSpawn = GetRandomEnemyPrefab();
+        
+        // Создаем врага и сразу добавляем его в список живых
+        GameObject spawnedEnemy = Instantiate(prefabToSpawn, spawnPoint.position, spawnPoint.rotation);
+        aliveEnemies.Add(spawnedEnemy);
+    }
+
+    private GameObject GetRandomEnemyPrefab()
+    {
+        // Считаем общую сумму шансов (в первой волне это 50 + 10 + 0.1 = 60.1)
+        float totalWeight = lightChance + mediumChance + bossChance;
+        
+        // Выбираем случайное число от 0 до общей суммы
+        float randomValue = Random.Range(0f, totalWeight);
+
+        // Проверяем, кто выпал (начинаем с самого редкого)
+        if (randomValue <= bossChance)
+        {
+            return enemy3Prefab; // Выпал Босс
+        }
+        else if (randomValue <= bossChance + mediumChance)
+        {
+            return enemy2Prefab; // Выпал Средний
+        }
+        else
+        {
+            return enemy1Prefab; // Выпал Лёгкий
+        }
+    }
+}
